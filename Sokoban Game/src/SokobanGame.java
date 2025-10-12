@@ -1,3 +1,5 @@
+package main.java;
+
 import java.util.*;
 
 import static java.lang.System.exit;
@@ -16,6 +18,9 @@ public class SokobanGame {
     private int moves = 0;
     private int boxesOnTarget = 0;
 
+    private int targets;
+    private int boxes;
+
     private char[][] board;
     private boolean[][] isTarget;
     private boolean[][] isBox;
@@ -23,7 +28,7 @@ public class SokobanGame {
 
     private final Stack<GameState> undoStack = new Stack<>();
 
-    private final Random rand = new Random();
+    private static final Random rand = new Random();
 
     public void initialize(int w, int h, int k) {
         this.width = w;
@@ -58,14 +63,15 @@ public class SokobanGame {
         int placedTargets = 0;
 
         while (placedTargets < this.elemLimit) {
-            int x = this.rand.nextInt(width - 2) + 1;
-            int y = this.rand.nextInt(height - 2) + 1;
+            int x = rand.nextInt(width - 2) + 1;
+            int y = rand.nextInt(height - 2) + 1;
             if (this.board[y][x] == EMPTY) {
                 this.board[y][x] = TARGET;
                 this.isTarget[y][x] = true;
                 placedTargets ++;
             }
         }
+        this.targets += placedTargets;
     }
 
     private boolean isPossible(int x, int y) {
@@ -97,12 +103,8 @@ public class SokobanGame {
             return true;
         }
 
-        if ((x == width - 2 && y == height - 3 && isBox[y + 1][x - 1]) ||
-                (x == width - 3 && y == height - 2 && isBox[y - 1][x + 1])) {
-            return true;
-        }
-
-        return false;
+        return (x == width - 2 && y == height - 3 && isBox[y + 1][x - 1]) ||
+                (x == width - 3 && y == height - 2 && isBox[y - 1][x + 1]);
     }
 
 
@@ -145,10 +147,11 @@ public class SokobanGame {
             isBox[y][x] = true;
             placedBoxes ++;
         }
+        boxes += placedBoxes;
     }
 
     private int prioritiseWalls(List<int[]> freeSpace) {
-        int placedBoxes = 0;
+        int placedBoxes;
 
         int targetsOnLeftWall = 0, targetsOnRightWall = 0;
         int targetsOnDownWall = 0, targetsOnUpWall = 0;
@@ -168,8 +171,8 @@ public class SokobanGame {
         if (isTarget[1][this.width - 2]) targetsOnRightWall --;
         if (isTarget[1][1]) targetsOnUpWall --;
 
-        int boxesOnLeftWall = 0, boxesOnRightWall = 0;
-        int boxesOnUpWall = 0, boxesOnDownWall = 0;
+        int boxesOnLeftWall, boxesOnRightWall;
+        int boxesOnUpWall, boxesOnDownWall;
 
         boxesOnLeftWall = helper(freeSpace, 1, true, targetsOnLeftWall);
         boxesOnUpWall = helper(freeSpace, 1, false, targetsOnUpWall);
@@ -216,6 +219,19 @@ public class SokobanGame {
         }
 
         return placed;
+    }
+
+    public void initializeFromLevel(ReadLevel level) {
+        this.width = level.width;
+        this.height = level.height;
+        this.board = level.board;
+        this.isBox = level.isBox;
+        this.isTarget = level.isTarget;
+        this.isBoxOnTarget = level.isBoxOnTarget;
+        this.playerX = level.playerX;
+        this.playerY = level.playerY;
+        this.elemLimit = level.targetsCount;
+        this.boxesOnTarget = level.boxesOnTarget;
     }
 
     public void move(String cmd) {
@@ -308,7 +324,7 @@ public class SokobanGame {
     public void printBoard() {
         for (int y = 0; y < this.height; y ++) {
             for (int x = 0; x < this.width; x ++) {
-                System.out.print(board[y][x]);
+                System.out.print(board[y][x] + " ");
             }
             System.out.println();
         }
@@ -329,7 +345,11 @@ public class SokobanGame {
     }
 
     public boolean checkWin() {
-        if(this.boxesOnTarget == this.elemLimit) {
+        if (this.boxes > this.targets) {
+            System.out.println("Impossible game layout");
+            exit(1);
+        }
+        if (this.boxesOnTarget == this.elemLimit || this.boxes == this.boxesOnTarget) {
             printBoard();
             System.out.printf("You win in %d moves!", this.moves);
             return true;
@@ -337,50 +357,115 @@ public class SokobanGame {
         return false;
     }
 
-    public static void main(String[] args) {
-        Scanner scanner = new Scanner(System.in);
-        int W, H, K;
-
-        while (true) {
-            System.out.print("Enter width (>4): ");
-            W = scanner.nextInt();
-            if (W >= 5) break;
-            System.out.println("Width must be at least 5!");
-        }
-        while (true) {
-            System.out.print("Enter height (>4): ");
-            H = scanner.nextInt();
-            if (H >= 5) break;
-            System.out.println("Height must be at least 5!");
-        }
-        while (true) {
-            System.out.print("Enter boxes limit: ");
-            K = scanner.nextInt();
-            if (K < ((W - 2) * (H - 2) - 2) / 2) break;
-            System.out.println("Invalid boxes amount");
-        }
-
-        SokobanGame game = new SokobanGame();
-        game.initialize(W, H, K);
-
-        scanner.nextLine();
-
+    private static void playGame(SokobanGame game, Scanner scanner) {
         while (!game.checkWin()) {
             game.printAllTestsSideBySide();
             System.out.print("Move (w/a/s/d, q to quit and u to undo): ");
             String cmd = scanner.nextLine().trim().toLowerCase();
 
-            if (cmd.equals("q") || cmd.equals("quit")) {
-                System.out.println("Game exited.");
-                break;
+            switch (cmd) {
+                case "q":
+                case "quit":
+                    System.out.println("Game exited.");
+                    exit(1);
+                case "u":
+                    game.undo();
+                    break;
+                default:
+                    game.move(cmd);
+            }
+        }
+    }
+
+    static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("Do you want to load or create a level?" + "\n" + "Press L to load or C to create: ");
+        String choice = scanner.nextLine().trim().toLowerCase();
+
+        while (choice.isEmpty() || (choice.charAt(0) != 'l' && choice.charAt(0) != 'c')) {
+            System.out.println("Invalid choice!");
+            choice = scanner.nextLine().trim().toLowerCase();
+        }
+
+        char option = choice.charAt(0);
+
+        if (option == 'l') {
+            System.out.println();
+            System.out.print("Do you want easy, medium or hard level?" + "\n" + "Enter your choice: ");
+            String difficulty = scanner.nextLine().trim().toLowerCase();
+            while (!difficulty.equals("easy") && !difficulty.equals("medium") && !difficulty.equals("hard")) {
+                System.out.println();
+                System.out.print("Invalid input!" + "\n" + "Enter your choice again: ");
+                difficulty = scanner.nextLine().trim().toLowerCase();
             }
 
-            if (cmd.equals("u")) {
-                game.undo();
-                continue;
+            int specificMap = rand.nextInt(1, 2);
+            String mapDifficulty = "";
+
+            switch (difficulty) {
+                case "easy": {
+                    mapDifficulty = "easy" + specificMap;
+                    break;
+                }
+                case "medium": {
+                    mapDifficulty = "medium" + specificMap;
+                    break;
+                }
+                case "hard": {
+                    mapDifficulty = "hard" + specificMap;
+                    break;
+                }
+                default:
+                    System.out.println("Invalid choice");
+                    break;
             }
 
-            game.move(cmd);
+            String filename = "resources/" + mapDifficulty + ".txt";
+
+            ReadLevel readLevel = new ReadLevel();
+            readLevel.loadLevel(filename);
+
+            SokobanGame game = new SokobanGame();
+            game.initializeFromLevel(readLevel);
+
+            scanner.nextLine();
+
+            playGame(game, scanner);
+        }
+
+        else if (option == 'c') {
+            int W, H, K;
+
+            while (true) {
+                System.out.print("Enter width (>4): ");
+                W = scanner.nextInt();
+                if (W >= 5) break;
+                System.out.println("Width must be at least 5!");
+            }
+            while (true) {
+                System.out.print("Enter height (>4): ");
+                H = scanner.nextInt();
+                if (H >= 5) break;
+                System.out.println("Height must be at least 5!");
+            }
+            while (true) {
+                System.out.print("Enter boxes limit: ");
+                K = scanner.nextInt();
+                if (K < ((W - 2) * (H - 2) - 2) / 2) break;
+                System.out.println("Invalid boxes amount");
+            }
+
+            SokobanGame game = new SokobanGame();
+            game.initialize(W, H, K);
+
+            scanner.nextLine();
+
+            playGame(game, scanner);
+        }
+
+        else {
+            throw new IllegalArgumentException("Invalid choice");
         }
 
         scanner.close();
@@ -392,25 +477,25 @@ public class SokobanGame {
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                System.out.print(board[y][x]);
+                System.out.print(board[y][x] + " ");
             }
 
             System.out.print("\t\t\t");
 
             for (int x = 0; x < width; x++) {
-                System.out.print(isTarget[y][x] ? "T" : ".");
+                System.out.print(isTarget[y][x] ? "T " : ". ");
             }
 
             System.out.print("\t\t\t");
 
             for (int x = 0; x < width; x++) {
-                System.out.print(isBox[y][x] ? "B" : ".");
+                System.out.print(isBox[y][x] ? "B " : ". ");
             }
 
             System.out.print("\t\t\t");
 
             for (int x = 0; x < width; x++) {
-                System.out.print(isBoxOnTarget[y][x] ? "O" : ".");
+                System.out.print(isBoxOnTarget[y][x] ? "O " : ". ");
             }
 
             System.out.println();
